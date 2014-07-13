@@ -1,0 +1,103 @@
+#!/usr/bin/perl
+## ---------------------------------------------------------------------------------
+## kfilter
+## ---------------------------------------------------------------------------------
+## 
+## Runs the Kalman filter fitting step.
+##
+## n_evts: the number of events to run per division
+## t_evts: the total number of events to run
+## r_track: forward (0) or reverse (1) fit
+##
+## ---------------------------------------------------------------------------------
+use POSIX;
+$debug = 1;       # debug output for this script (not for Nexus or FMWK runs)
+
+# Parameters
+$rname0 = "test";
+$n_evts = 20;
+$t_evts = 20;
+$rev_track = 0;
+$bbevt = 0;
+$walltime = "00:30:00";
+$qtype = "short";
+
+$fname_dir = "/data4/NEXT/MAGBOX/sim2";
+#$fname_input = "MagBox_Xe_10atm_00tesla.Xe136_bb0nu.0.next";
+$fname_input = "MagBox_Xe_10atm_00tesla.e2447.0.next";
+
+
+if($rev_track > 0) {
+    $rname = "r$rname0";
+}
+else {
+    $rname = $rname0;
+}
+
+# ----------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------
+# Paths and directories
+# ----------------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------------
+# Determine the run number and directory structure
+# ----------------------------------------------------------------------------------
+$PATH_BASE = "/data4/NEXT/users/jrenner/kalmanfilter";
+$PATH_IRENE = "$PATH_BASE/trunk/Irene";
+$PATH_BASH = "$PATH_BASE/bash";
+$dir_run = "$PATH_BASH/$rname0";
+
+# Make sure the directory structure is present
+if($debug) { print "Creating directory structure...\n"; }
+if(!(-d $dir_run)) {
+  system("mkdir $dir_run"); print "--> Created $dir_run\n";
+  print "Done.\n\n";
+}
+
+# ----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------
+
+# Calculate the number of divisions.
+$div = int($t_evts / $n_evts);
+if(($t_evts - $div*$n_evts) > 0) {
+  $div = $div + 1;
+}
+
+# Run the simulation in parallel according to the number of divisions
+for(my $s = 0; $s < $div; $s++)	{
+
+    # Construct the name of the input bash file
+    my $bash_fname = "$dir_run/$rname" . "$s.pbs";
+
+    $evt_start = $s*$n_evts;
+    $evt_end = $n_evts*($s+1);
+    if($evt_end > $t_evts) {
+        $evt_end = $t_evts;
+    }
+
+    $err_file = "$dir_run/$rname" . "_err_$s.err";
+    $out_file = "$dir_run/$rname" . "_out_$s.out"; 
+
+    # Write the input configuration file
+    # Note: list of particle names can be found here: 
+    #  http://geant4.web.cern.ch/geant4/UserDocumentation/UsersGuides/ForApplicationDeveloper/html/ch05s03.html
+    open(F_BASH, "> $bash_fname");
+    print "Printing configuration file for run $s...\n";
+    print F_BASH <<ENDFILE;
+#PBS -N imain_$s
+#PBS -q $qtype
+#PBS -l nodes=1:ppn=1,walltime=$walltime
+#PBS -e $err_file
+#PBS -o $out_file
+
+cd $PATH_IRENE
+python IMain.py -i $fname_input -d $fname_dir -s $evt_start -e $evt_end -u $rname0 -g $bbevt -r $rev_track
+
+ENDFILE
+    close(F_BASH);
+
+    # Submit the file.
+    print "--> Submitting job file $bash_fname to queue\n";
+    system("qsub $bash_fname");
+}

@@ -1,0 +1,80 @@
+##
+## Notes on running the Python-based Kalman Filter code
+##
+
+# ----------------------------------------------------------------------------------------------------------------------------------------------
+# Setup:
+# ----------------------------------------------------------------------------------------------------------------------------------------------
+1. Download the code from svn:
+
+     svn co svn://next.ific.uv.es/svn/sw/pylosk/trunk trunk
+
+   From this point foward we will assume that the code has been downloaded to /data4/NEXT/users/name/kalmanfilter/trunk
+
+2. Add the following folders downloaded with the SVN code to your PYTHONPATH variable:
+
+           /Base
+           /Irene
+           /KalmanFilter
+           /KBase
+           /KLog
+
+  For example, in the ~/.bashrc file:
+
+    export PYTHONPATH=/data4/NEXT/users/name/kalmanfilter/trunk:/data4/NEXT/users/name/kalmanfilter/trunk/KalmanFilter:/data4/NEXT/users/name/kalmanfilter/trunk/KBase:/data4/NEXT/users/name/kalmanfilter/trunk/KLog:/data4/NEXT/users/name/kalmanfilter/trunk/Base:/data4/NEXT/users/name/kalmanfilter/trunk/Irene:$PYTHONPATH
+
+3. Set an environment variable called DATA that points to the directory in which the MC (Irene) data is stored (/data4/NEXT/MAGBOX/sim2).  In the ~/.bashrc file:
+
+    export DATA=/data4/NEXT/MAGBOX/sim2
+
+4. Create a directory which will contain the main output results (output of the fits, toyMC generated tracks, and plots).  For example: /data4/NEXT/users/name/kalmanfilter/out
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+# Generating and fitting tracks with the toy Monte Carlo (toyMC):
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+The toy Monte Carlo generates tracks in steps along which the electron is propagated in a straight line and after each step is redirected according to multiple scattering.  This is the same model as that assumed in the fit procedure.
+
+- First, set the relevant parameters in toyMC/trackdefs.py, most importantly the paths to the output directories for the generated tracks and fits (the base of this directory was set up in step 4 of the "Setup" section of this note), the name of the run, and the number of tracks to generate/fit.
+
+- Run: python trackgen.py
+  The number of tracks specified in trackdefs.py should be generated and the resulting files placed in a folder named trk_name in the output directory trk_outdir specified in trackdefs.py.
+
+- Set rev_track = False in trackdefs.py and run: python kftrackfit.py
+  The forward fit will be performed.
+
+- Set rev_track = True in trackdefs.py and run: python kftrackfit.py
+  The reverse fit will be performed.
+
+- Run genplots.py to generate plots of key quantities and generate chi2 and cfxy profiles.  (note: cfxy = sqrt(CF11 + CF22) where CF11 and CF22 are the first two diagonal elements of the filtered covariance matrix for each step of the Kalman filter)
+
+- Run fitprof.py to perform comparisons between the chi2 and cfxy averaged profiles generated using genplots.py and the individual track profiles
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+# Fitting Irene tracks:
+# ---------------------------------------------------------------------------------------------------------------------------------------------
+The Irene tracks were generated from a GEANT4 Monte Carlo and are saved in ROOT files and read in using the Python ROOT interface.  Since they are already generated, there is no equivalent to the file trackgen.py in the toyMC model - we start immediately from the fitting step which is now handled by IMain.py instead of kftrackfit.py).  Note that the plot generation step is actually handled by toyMC scripts.
+
+- Set the relevant parameters in IParam.py.  Several of these parameters can be specified directly when calling the script; several important parameters that can be specified only in IParam.py are the measurement resolution parameters (sigma_x and sigma_y), the sampling frequency (sample), and the chi2 threshold for defining a new segment (Chi2Lim).
+
+- Run the fit, once in the forward and once in the reverse direction.  This can be done in principle by running: python IMain.py.  However, only default parameters and parameters from IParam.py will be used in this case.  In order to specify all parameters, run:
+
+python IMain -i <inputFile> -d <inputDir> -s <event start> -e <event end> -u <run_name> -g <0=sel,1=bb> -r <0=forward,1=reverse>
+
+inputFile: the input Irene file
+inputDir: directory in which the data is stored
+event start: the event number of the event from which to begin the fit
+event end: the event number of the event from which to end the fit
+run_name: a string identifying this run which will be used to name output files and directories
+-g: set to 0 if the events to be fit are single electrons (sel) and 1 if they are 2-electron double-beta (bb) events
+-r: set to 0 if the forward fit is to be performed and 1 if the reverse fit is to be performed
+
+Note again that IMain should be run twice, once with -r 0 (forward fit) and once with -r 1 (reverse fit).
+
+There is a script kfilter located in trunk/scripts which will run IMain according to the input parameters on one of the batch queues on neutrinos.  In this way one can split up a large run over several cores.  The script will prepare the IMain.py parameters and .pbs files and submit them to the queue. 
+
+- Run genplots.py as in the toyMC instructions - be sure to change the fit directories, trk_name, and number of events.  Note genplots extracts information from both forward and reverse fits so there is no need to run it twice with different values of rev_trk (in fact, rev_trk is only relevant for toyMC)
+
+- Run fitprof.py as in the toyMC instructions, noting again to set the relevant parameters in trackdefs.py
+

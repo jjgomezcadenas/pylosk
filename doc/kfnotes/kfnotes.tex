@@ -1,0 +1,158 @@
+\documentclass[10pt]{article}
+%\pagestyle{headings}
+
+\oddsidemargin 0.0in
+\evensidemargin 0.0in
+\textwidth 6.0in
+\topmargin 0.2in
+\footskip 20pt
+\textheight 8.5in
+
+\usepackage{hyperref,color,graphicx,braket,mathrsfs,slashed,amsmath,amssymb}
+\hypersetup{colorlinks,%
+            citecolor=blue,%
+            linkcolor=blue,%
+            filecolor=blue,%
+            urlcolor=red}
+
+\bibliographystyle{plain}
+
+\begin{document}
+
+{\noindent\Large\textbf{Notes on the Kalman Filter Formalism and Implementation}}\\
+J.J., Francesc, Josh\\
+\today
+
+\section{The Kalman Filter}
+\noindent The Kalman Filter is a technique that can be used to iteratively fit a dataset assuming some predictive model and a noise process that distorts
+the evolution of the system from that dictated by the model.  It provides the best fit, or
+that yielding the minimal mean square error in the fit parameters, given that the noise processes involved are Gaussian in nature.  The fit parameters
+are arranged in a vector called the state vector, and the uncertainties and correlations between them are encompassed in a covariance matrix.  The
+state vector and covariance matrix are determined recursively using the measurements in the dataset, beginning with some initial values, and for each 
+recorded measurement predicting a new state vector and correlation matrix using a model and then correcting (or ``filtering'') these predictions based 
+on the measured value.  Here we will be most interested in the application of the Kalman Filter to the fitting of ionization tracks left by energetic
+electrons in high pressure xenon gas.\\
+
+\noindent Here we state the standard Kalman Filter equations to be applied to a dynamical system whose evolution is governed by a known predictive model
+with an accompanied noise process.  We adopt a notation similar to that of \cite{Wolin_1993}.  We denote the state vector 
+containing the values of the fit parameters as $\mathbf{a}$, the covariance matrix containing the uncertainties and correlations in these parameters
+as $\mathbf{C}$, the vector containing the results of a single measurement in the dataset as $\mathbf{m}$, and the covariance matrix of the measured values
+as $\mathbf{G}$.  In addition, the noise process distorts the values of the fit parameters according to a covariance matrix $\mathbf{Q}$.  The Kalman Filter
+operates in two stages on each measurement $k$ in a dataset of $N$ measurements.  In the first stage, the fit parameters of the previous state are 
+propagated to new values, forming a predicted state.  In the second stage, this state is modified based on the value of the measurement to give
+a ``filtered'' state.\\
+
+\noindent For a dataset of $N$ measurements we will have $N-1$ predicted states and $N-1$ filtered states, and we label the states
+with the index $k$.  We denote the predicted state and covariance matrix as $\mathbf{a}_{\mathrm{P},k}$ and $\mathbf{C}_{\mathrm{P},k}$, and the 
+filtered state and covariance matrix as $\mathbf{a}_{\mathrm{F},k}$ and $\mathbf{C}_{\mathrm{F},k}$.  The predicted state vector and covariance matrix
+are calculated as
+
+\begin{equation}
+ \begin{split}
+  \mathbf{a}_{\mathrm{P},k} = & \,\,\mathbf{F}_{k-1}\mathbf{a}_{\mathrm{F},k-1},\\
+  \mathbf{C}_{\mathrm{P},k} = & \,\,\mathbf{F}_{k-1}\mathbf{C}_{\mathrm{F},k-1}\mathbf{F}_{k-1}^{T} + \mathbf{Q}_{k-1},
+ \end{split}
+\end{equation}
+
+% Note that here $\mathbf{Q}_{k-1}$ means the covariance matrix constructed with the coordinates of the filtered state (k-1) and z = zi of the current
+% slice k.  In addition, the dz of the current slice k is used to compute the multiple scattering for this slice.  In other words, we are sitting on the
+% scattering surface for state k (the beginning of the slice) when we compute $\mathbf{Q}_{k-1}$
+\noindent where $\mathbf{F}_{k-1}$ is the propagator matrix which advances the state vector from state $k-1$ to the predicted state $k$ according to the
+predictive model.  Note that in the $k = 0$ case, an initial state is determined by some arbitrary means and is set as the filtered state to begin the process.  
+For a measurement $\mathbf{m}_{k}$ with measurement covariance matrix $\mathbf{V}_{k}$ and inverse $\mathbf{G}_{k} = \mathbf{V}_{k}^{-1}$, the filtered 
+state vector and covariance matrix are calculated as
+
+\begin{equation}
+ \begin{split}
+  \mathbf{a}_{\mathrm{F},k} = & \,\,\mathbf{a}_{\mathrm{P},k} + \mathbf{K}_{k}(\mathbf{m}_{k} - \mathbf{H}_{k}\mathbf{a}_{\mathrm{P},k}),\\
+  \mathbf{C}_{\mathrm{F},k} = & \,\,[\mathbf{C}_{\mathrm{P},k}^{-1} + \mathbf{H}_{k}^{T}\mathbf{G}_{k}\mathbf{H}_{k}]^{-1},
+ \end{split}
+\end{equation}
+
+\noindent where $\mathbf{I}$ is the identity matrix, $\mathbf{H}_{k}$ converts the state vector $\mathbf{a}_{\mathrm{P},k}$ into a corresponding physical measurement, 
+and $\mathbf{K}_{k}$ is called the Kalman gain matrix,
+
+\begin{equation}
+ \mathbf{K}_{k} = \bigl[\mathbf{C}_{\mathrm{P},k}^{-1} + \mathbf{H}_{k}^{T}\mathbf{G}_{k}\mathbf{H}_{k}\bigr]^{-1}\mathbf{H}_{k}^{T}\mathbf{G}_{k}.
+\end{equation}
+
+\section{3-D Track Reconstruction with the Kalman Filter}
+\noindent Here we detail the formalism for reconstructing electron tracks in high pressure xenon from a dataset consisting of a list of $(x,y,z)$ hits.
+We represent the track determined by $N$ measurements by a series of $N-1$ nodes, each slice $k$ containing the $(x,y)$ coordinates of measurement $k$
+and an initial z-coordinate $z_{i}$ from measurement $k$ and final z-coordinate $z_{f}$ from measurement $k+1$.  We write a state vector that, at each node,
+contains the information about the $(x,y)$ position of the track and the direction of the particle at that point in the track.  Note that all state vectors
+are associated with a node, and therefore we assume that the state before propagation across the node has $z = z_{i}$ and after propagation has
+$z = z_{f}$.  This requires 4 degrees of freedom, including x, y, and two angles we will take to be the tangent angles with the $\mathbf{\hat{z}}$-axis,
+$\tan\theta_{x} = dx/dz$ and $\tan\theta_{y} = dy/dz$.  Rather than using the coordinates $x$ and $y$ themselves as two of the state vector components,
+we will choose the following state representation from \cite{Wolin_1993}
+
+\begin{equation}\label{eqn_avector}
+ \mathbf{a} = \left(\begin{array}{c} P_{1}\\ P_{2}\\ P_{3}\\ P_{4} \end{array} \right) = \left(\begin{array}{c} x - z\tan\theta_{x}\\ y - z\tan\theta_{y}\\ \tan\theta_{x}\\ \tan\theta_{y} \end{array} \right),
+\end{equation}
+
+\noindent where $z = z_{f}$ of the associated slice.  For a given node $k$, the predictive model will propagate the filtered state at index 
+$k-1$ (with $z = z_{i}$ of the node $k$, equivalent to $z_{f}$ of node $k-1$) to the predicted state at index $k$, assuming the state travels
+in a straight line across a distance $dz$, so that $dx = (dx/dz)dz = (\tan\theta_{x})dz$, $P_{1}$ is propagated as
+
+\begin{equation}
+ P_{1} = x - z\tan\theta_{x} \rightarrow (x + dz\tan\theta_{x}) - (z + dz)\tan\theta_{x} = x - z\tan\theta_{x}.
+\end{equation}
+
+\noindent That is, in propagating from $z_{i}$ to $z_{f}$ the parameter $P_{1}$ remains unchanged in this representation.  Similar equations can be written 
+for $P_{2}$.  Since the particle is assumed to move in a straight line across $dz$, the direction tangents $P_{3}$ and $P_{4}$ are also unchanged.  We conclude
+therefore that our propagation matrix for all values of $k$ is simply the identity,
+
+\begin{equation}
+ \mathbf{F}_{k} = \mathbf{I}.
+\end{equation}
+
+\noindent The use of the chosen representation (equation \ref{eqn_avector}) has allowed for this simplification, but now we must write the covariance matrix 
+of the multiple scattering noise process $\mathbf{Q}_{k}$ in this representation.  Multiple scattering is assumed to occur during the travel from $z_{i}$
+to $z_{f}$ in which the angles $\theta_{x}$ and $\theta_{y}$ are altered by gaussian noise with variance \cite{RPP_2012}
+
+\begin{equation}
+ \sigma^{2}(\theta_{x,y}) = \frac{13.6\,\,\mathrm{MeV}}{\beta p}\sqrt{dz/L_{0}}\bigl[1 + 0.038\ln(dz/L_{0})\bigr],
+\end{equation}
+
+\noindent for an electron with momentum $p$ in MeV/c at the current node, beta factor $\beta$ (where $c = 1$).  $L_{0}$ is the radiation length of the
+detector medium (for xenon we use $L_{0} = 1530 \,\mathrm{cm} / P$, where $P$ is the pressure in bar).\footnote{This formula is stated to give results of 
+11\% accuracy or better for $10^{-3} < dz/L_{0} < 100$, so it should be ensured that the nodes have widths that fit in this range.}
+The two independent variances on $\theta_{x}$ and $\theta_{y}$ can be propagated to variance in the state parameters, which all depend on at least
+one of the two angles.  This is done in \cite{Wolin_1993} and the resulting correlation matrix is
+
+\begin{equation}
+\begin{split}
+ \mathbf{Q} = \sigma^{2} & (\theta_{x,y})[1 + (P_{3})^{2} + (P_{4})^{2}] \\\\
+  & \times \left(\begin{array}{cccc} z^{2}[1 + (P_{3})^{2}] & z^{2}P_{3}P_{4} & -z[1 + (P_{3})^{2}] & -zP_{3}P_{4}\\ z^{2}P_{3}P_{4} & z^{2}[1 + (P_{4})^{2}] & -zP_{3}P_{4} & -z[1 + (P_{4})^{2}]\\ -z[1 + (P_{3})^{2}] & -zP_{3}P_{4} & [1 + (P_{3})^{2}] & P_{3}P_{4}\\ -zP_{3}P_{4} & -z[1 + (P_{4})^{2}] & P_{3}P_{4} & [1 + (P_{4})^{2}] \end{array} \right),
+\end{split}
+\end{equation}
+
+\noindent noting that $z$ in the above expression is the $z$-coordinate at which the scatter occurs ($z_{i}$ of the node).\\
+
+\noindent We can obtain the $\mathbf{H}$ matrix by asking how we would convert a state $\mathbf{a}$ into an $(x,y)$ measurement at that node.  This
+amounts to extracting the values $x$ and $y$, and
+
+\begin{equation}
+\begin{split}
+ x = P_{1} + zP_{3}\\
+ y = P_{2} + zP_{4},
+\end{split}
+\end{equation}
+
+\noindent where $z = z_{f}$ for the node since we will be acting with $\mathbf{H}$ on the filtered state.  Therefore we have
+
+\begin{equation}
+ \mathbf{H} = \left(\begin{array}{cccc} 1 & 0 & z & 0\\ 0 & 1 & 0 & z\end{array} \right),
+\end{equation}
+
+\noindent where again $z = z_{f}$ for the given node (so $\mathbf{H}$ will depend on $k$).  Assuming the x and y measurements are uncorrelated with
+variances $\sigma_{x}^{2}$ and $\sigma_{y}^{2}$, the measurement covariance matrix will be diagonal, and therefore its inverse will also be diagonal,
+
+\begin{equation}
+ \mathbf{G} = \left(\begin{array}{cc} 1/\sigma_{x}^{2} & 0\\ 0 & 1/\sigma_{y}^{2}\end{array}\right).
+\end{equation}
+
+\noindent The above equations can be used in the Kalman Filter formalism for the application of a straight-line fit to a track with multiple scattering noise.
+
+\bibliography{kfnotes}
+\end{document}
