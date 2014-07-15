@@ -6,8 +6,8 @@ from KParam import *
 import os
 
 generator ='Irene'  # can also be Toy, Paolina, etc
-inputFile="MagBox_Xe_10atm_00tesla.e2447.0.next"
-#inputFile="MagBox_Xe_10atm_00tesla.e2447.next"  # beware! set pressure right!
+#inputFile="MagBox_Xe_10atm_00tesla.e2447.0.next"
+inputFile="MagBox_Xe_10atm_00tesla.e2447.next"  # beware! set pressure right!
 #inputFile="MagBox_Xe_10atm_00tesla.Xe136_bb0nu.next"
 inputDir=os.environ['DATA']
 outputDir='.'

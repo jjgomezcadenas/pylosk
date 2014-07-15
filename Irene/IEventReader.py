@@ -3,8 +3,9 @@ Irene Event Reader: Implements the interface KEventReader
 """
 from ROOT import *
 from KEventReader import KEventReader
-
+# Load irene library
 gSystem.Load("libirene")
+
 
 class IEventReader(KEventReader):
     """
@@ -26,7 +27,7 @@ class IEventReader(KEventReader):
         self.fEvtTree.SetBranchAddress(gsEvtBranch, self.ievt)
         self.numberOfBytesRead = 0
         self.totalNumberOfBytesRead =0
-
+        
 
     def NumberOfEvents(self):
         """
